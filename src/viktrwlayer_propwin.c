@@ -60,7 +60,7 @@
 
 typedef enum {
   PROPWIN_GRAPH_TYPE_ELEVATION_DISTANCE,
-  PROPWIN_GRAPH_TYPE_GRADE_DISTANCE,
+  PROPWIN_GRAPH_TYPE_GRADIENT_DISTANCE,
   PROPWIN_GRAPH_TYPE_SPEED_TIME,
   PROPWIN_GRAPH_TYPE_DISTANCE_TIME,
   PROPWIN_GRAPH_TYPE_ELEVATION_TIME,
@@ -126,8 +126,8 @@ typedef struct _propwidgets {
   GtkWidget *w_time_dur;
   GtkWidget *w_cur_dist; /*< Current distance */
   GtkWidget *w_cur_elevation;
-  GtkWidget *w_cur_grade_dist; /*< Current distance on grade graph */
-  GtkWidget *w_cur_grade_grade; /*< Current grade on grade graph */
+  GtkWidget *w_cur_gradient_dist; /*< Current distance on gradient graph */
+  GtkWidget *w_cur_gradient_gradient; /*< Current gradient on gradient graph */
   GtkWidget *w_cur_time; /*< Current time */
   GtkWidget *w_cur_speed;
   GtkWidget *w_cur_dist_dist; /*< Current distance on distance graph */
@@ -139,20 +139,20 @@ typedef struct _propwidgets {
   GtkWidget *w_show_dem;
   GtkWidget *w_show_alt_gps_speed;
   GtkWidget *w_show_gps_speed;
-  GtkWidget *w_show_grade_gps_speed;
+  GtkWidget *w_show_gradient_gps_speed;
   GtkWidget *w_show_dist_speed;
   GtkWidget *w_show_elev_speed;
   GtkWidget *w_show_sd_gps_speed;
   gdouble   track_length;
   gdouble   track_length_inc_gaps;
   PropSaved elev_graph_saved_img;
-  PropSaved grade_graph_saved_img;
+  PropSaved gradient_graph_saved_img;
   PropSaved speed_graph_saved_img;
   PropSaved dist_graph_saved_img;
   PropSaved elev_time_graph_saved_img;
   PropSaved speed_dist_graph_saved_img;
   GtkWidget *elev_box;
-  GtkWidget *grade_box;
+  GtkWidget *gradient_box;
   GtkWidget *speed_box;
   GtkWidget *dist_box;
   GtkWidget *elev_time_box;
@@ -167,11 +167,11 @@ typedef struct _propwidgets {
   gint      ciat; // Chunk size Index into Altitudes / Time
   // NB cia & ciat are normally same value but sometimes not due to differing methods of altitude array creation
   //    thus also have draw_min_altitude for each altitude graph type
-  gdouble   *grades;
-  gdouble   min_grade;
-  gdouble   max_grade;
-  gdouble   draw_min_grade;
-  gint      cig; // Chunk size Index into Grades
+  gdouble   *gradients;
+  gdouble   min_gradient;
+  gdouble   max_gradient;
+  gdouble   draw_min_gradient;
+  gint      cig; // Chunk size Index into Gradients
   gdouble   *speeds;
   gdouble   *speeds_dist;
   gdouble   min_speed;
@@ -199,8 +199,8 @@ static void prop_widgets_free(PropWidgets *widgets)
 {
   if (widgets->elev_graph_saved_img.img)
     g_object_unref(widgets->elev_graph_saved_img.img);
-  if (widgets->grade_graph_saved_img.img)
-    g_object_unref(widgets->grade_graph_saved_img.img);
+  if (widgets->gradient_graph_saved_img.img)
+    g_object_unref(widgets->gradient_graph_saved_img.img);
   if (widgets->speed_graph_saved_img.img)
     g_object_unref(widgets->speed_graph_saved_img.img);
   if (widgets->dist_graph_saved_img.img)
@@ -211,8 +211,8 @@ static void prop_widgets_free(PropWidgets *widgets)
     g_object_unref(widgets->speed_dist_graph_saved_img.img);
   if (widgets->altitudes)
     g_free(widgets->altitudes);
-  if (widgets->grades)
-    g_free(widgets->grades);
+  if (widgets->gradients)
+    g_free(widgets->gradients);
   if (widgets->speeds)
     g_free(widgets->speeds);
   if (widgets->distances)
@@ -289,7 +289,7 @@ static void get_new_min_and_chunk_index_altitude (gdouble mina, gdouble maxa, gd
  *   the new minimum value to be used for the altitude graph
  *   the index in to the altitudes chunk sizes array (ci = Chunk Index)
  */
-static void get_new_min_and_chunk_index_grade (gdouble mina, gdouble maxa, gdouble *new_min, gint *ci)
+static void get_new_min_and_chunk_index_gradient (gdouble mina, gdouble maxa, gdouble *new_min, gint *ci)
 {
   /* Get unitized chunk */
   /* Find suitable chunk index */
@@ -517,9 +517,9 @@ static void track_graph_click( GtkWidget *event_box, GdkEventButton *event, gpoi
       graph_saved_img = &widgets->elev_graph_saved_img;
       is_time_graph   = FALSE;
       break;
-    case PROPWIN_GRAPH_TYPE_GRADE_DISTANCE:
-      graph_box       = widgets->grade_box;
-      graph_saved_img = &widgets->grade_graph_saved_img;
+    case PROPWIN_GRAPH_TYPE_GRADIENT_DISTANCE:
+      graph_box       = widgets->gradient_box;
+      graph_saved_img = &widgets->gradient_graph_saved_img;
       is_time_graph   = FALSE;
       break;
     case PROPWIN_GRAPH_TYPE_SPEED_TIME:
@@ -581,9 +581,9 @@ static gboolean track_profile_click( GtkWidget *event_box, GdkEventButton *event
   return TRUE;  /* don't call other (further) callbacks */
 }
 
-static gboolean track_grade_click( GtkWidget *event_box, GdkEventButton *event, gpointer *pass_along )
+static gboolean track_gradient_click( GtkWidget *event_box, GdkEventButton *event, gpointer *pass_along )
 {
-  track_graph_click(event_box, event, pass_along, PROPWIN_GRAPH_TYPE_GRADE_DISTANCE);
+  track_graph_click(event_box, event, pass_along, PROPWIN_GRAPH_TYPE_GRADIENT_DISTANCE);
   return TRUE;  /* don't call other (further) callbacks */
 }
 
@@ -627,16 +627,16 @@ static gint blobby_altitude ( gdouble x_blob, PropWidgets *widgets )
 }
 
 /**
- * Calculate y position for blob on grade graph
+ * Calculate y position for blob on gradient graph
  */
-static gint blobby_grade ( gdouble x_blob, PropWidgets *widgets )
+static gint blobby_gradient ( gdouble x_blob, PropWidgets *widgets )
 {
   gint ix = (gint)x_blob;
   // Ensure ix is inbounds
   if (ix == widgets->profile_width)
     ix--;
 
-  gint y_blob = widgets->profile_height-widgets->profile_height*(widgets->grades[ix]-widgets->draw_min_grade)/(chunksg[widgets->cig]*LINES);
+  gint y_blob = widgets->profile_height-widgets->profile_height*(widgets->gradients[ix]-widgets->draw_min_gradient)/(chunksg[widgets->cig]*LINES);
 
   return y_blob;
 }
@@ -781,7 +781,7 @@ void track_profile_move( GtkWidget *event_box, GdkEventMotion *event, gpointer *
   g_list_free(child);
 }
 
-void track_grade_move( GtkWidget *event_box, GdkEventMotion *event, gpointer *pass_along )
+void track_gradient_move( GtkWidget *event_box, GdkEventMotion *event, gpointer *pass_along )
 {
   VikTrack *tr = pass_along[0];
   PropWidgets *widgets = pass_along[3];
@@ -801,7 +801,7 @@ void track_grade_move( GtkWidget *event_box, GdkEventMotion *event, gpointer *pa
 
   gdouble meters_from_start;
   VikTrackpoint *trackpoint = vik_track_get_closest_tp_by_percentage_dist ( tr, (gdouble) x / widgets->profile_width, &meters_from_start );
-  if (trackpoint && widgets->w_cur_grade_dist) {
+  if (trackpoint && widgets->w_cur_gradient_dist) {
     static gchar tmp_buf[20];
     vik_units_distance_t dist_units = a_vik_get_units_distance ();
     switch (dist_units) {
@@ -814,29 +814,29 @@ void track_grade_move( GtkWidget *event_box, GdkEventMotion *event, gpointer *pa
     default:
       g_critical("Houston, we've had a problem. distance=%d", dist_units);
     }
-    gtk_label_set_text(GTK_LABEL(widgets->w_cur_grade_dist), tmp_buf);
+    gtk_label_set_text(GTK_LABEL(widgets->w_cur_gradient_dist), tmp_buf);
   }
 
-  // Show track grade for this position - to the nearest whole number
-  if (trackpoint && widgets->w_cur_grade_grade) {
+  // Show track gradient for this position - to the nearest whole number
+  if (trackpoint && widgets->w_cur_gradient_gradient) {
     static gchar tmp_buf[20];
     
-    double grade = widgets->grades[(int) x];
+    double gradient = widgets->gradients[(int) x];
 
-    g_snprintf(tmp_buf, sizeof(tmp_buf), "%d%%", (int)grade);
-    gtk_label_set_text(GTK_LABEL(widgets->w_cur_grade_grade), tmp_buf);
+    g_snprintf(tmp_buf, sizeof(tmp_buf), "%d%%", (int)gradient);
+    gtk_label_set_text(GTK_LABEL(widgets->w_cur_gradient_gradient), tmp_buf);
   }
 
   widgets->blob_tp = trackpoint;
 
-  if ( widgets->grades == NULL )
+  if ( widgets->gradients == NULL )
     return;
 
   GtkWidget *window = gtk_widget_get_toplevel (event_box);
   GList *child = gtk_container_get_children(GTK_CONTAINER(event_box));
   GtkWidget *image = GTK_WIDGET(child->data);
 
-  gint y_blob = blobby_grade (x, widgets);
+  gint y_blob = blobby_gradient (x, widgets);
 
   gdouble marker_x = -1.0; // i.e. Don't draw unless we get a valid value
   if (widgets->is_marker_drawn) {
@@ -851,7 +851,7 @@ void track_grade_move( GtkWidget *event_box, GdkEventMotion *event, gpointer *pa
 				   window->style->black_gc,
 				   MARGIN+x,
 				   y_blob,
-				   &widgets->grade_graph_saved_img,
+				   &widgets->gradient_graph_saved_img,
 				   widgets->profile_width,
 				   widgets->profile_height,
 				   &widgets->is_marker_drawn,
@@ -1411,7 +1411,7 @@ static void draw_elevations (GtkWidget *image, VikTrack *tr, PropWidgets *widget
 
 /**
  * Draws representative speed on the supplied pixmap
- *   (which is the grades graph)
+ *   (which is the gradients graph)
  */
 static void draw_speed_dist(VikTrack *tr,
 				    GdkDrawable *pix,
@@ -1447,9 +1447,9 @@ static void draw_speed_dist(VikTrack *tr,
 }
 
 /**
- * Draw just the grade image
+ * Draw just the gradient image
  */
-static void draw_grades (GtkWidget *image, VikTrack *tr, PropWidgets *widgets )
+static void draw_gradients (GtkWidget *image, VikTrack *tr, PropWidgets *widgets )
 {
   GtkWidget *window;
   GdkPixmap *pix;
@@ -1459,22 +1459,22 @@ static void draw_grades (GtkWidget *image, VikTrack *tr, PropWidgets *widgets )
   GdkColor color;
 
   // Free previous allocation
-  if ( widgets->grades )
-    g_free ( widgets->grades );
+  if ( widgets->gradients )
+    g_free ( widgets->gradients );
 
-  widgets->grades = vik_track_make_grade_map ( tr, widgets->profile_width );
+  widgets->gradients = vik_track_make_gradient_map ( tr, widgets->profile_width );
 
-  if ( widgets->grades == NULL )
+  if ( widgets->gradients == NULL )
     return;
 
-  minmax_array(widgets->grades, &widgets->min_grade, &widgets->max_grade, TRUE, widgets->profile_width);
+  minmax_array(widgets->gradients, &widgets->min_gradient, &widgets->max_gradient, TRUE, widgets->profile_width);
 
-  get_new_min_and_chunk_index_grade (widgets->min_grade, widgets->max_grade, &widgets->draw_min_grade, &widgets->cig);
+  get_new_min_and_chunk_index_gradient (widgets->min_gradient, widgets->max_gradient, &widgets->draw_min_gradient, &widgets->cig);
 
   // Assign locally
-  mina = widgets->draw_min_grade;
+  mina = widgets->draw_min_gradient;
 
-  window = gtk_widget_get_toplevel (widgets->grade_box);
+  window = gtk_widget_get_toplevel (widgets->gradient_box);
 
   pix = gdk_pixmap_new( window->window, widgets->profile_width + MARGIN, widgets->profile_height, -1 );
 
@@ -1509,12 +1509,12 @@ static void draw_grades (GtkWidget *image, VikTrack *tr, PropWidgets *widgets )
     pl = NULL;
   }
 
-  /* draw grades */
+  /* draw gradients */
   for ( i = 0; i < widgets->profile_width; i++ )
       gdk_draw_line ( GDK_DRAWABLE(pix), window->style->dark_gc[3], 
-		      i + MARGIN, widgets->profile_height, i + MARGIN, widgets->profile_height-widgets->profile_height*(widgets->grades[i]-mina)/(chunksg[widgets->cig]*LINES) );
+		      i + MARGIN, widgets->profile_height, i + MARGIN, widgets->profile_height-widgets->profile_height*(widgets->gradients[i]-mina)/(chunksg[widgets->cig]*LINES) );
 
-  if ( gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(widgets->w_show_grade_gps_speed)) ) {
+  if ( gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(widgets->w_show_gradient_gps_speed)) ) {
     GdkGC *gps_speed_gc = gdk_gc_new ( window->window );
 
     gdk_color_parse ( "red", &color );
@@ -2146,18 +2146,18 @@ static void draw_all_graphs ( GtkWidget *widget, gpointer *pass_along, gboolean 
     }
   }
 
-  // Draw grades
-  if (widgets->grade_box != NULL) {
+  // Draw gradients
+  if (widgets->gradient_box != NULL) {
 
     // Saved image no longer any good as we've resized, so we remove it here
-    if (resized && widgets->grade_graph_saved_img.img) {
-      g_object_unref(widgets->grade_graph_saved_img.img);
-      widgets->grade_graph_saved_img.img = NULL;
-      widgets->grade_graph_saved_img.saved = FALSE;
+    if (resized && widgets->gradient_graph_saved_img.img) {
+      g_object_unref(widgets->gradient_graph_saved_img.img);
+      widgets->gradient_graph_saved_img.img = NULL;
+      widgets->gradient_graph_saved_img.saved = FALSE;
     }
 
-    child = gtk_container_get_children(GTK_CONTAINER(widgets->grade_box));
-    draw_grades (GTK_WIDGET(child->data), tr, widgets );
+    child = gtk_container_get_children(GTK_CONTAINER(widgets->gradient_box));
+    draw_gradients (GTK_WIDGET(child->data), tr, widgets );
 
     image = GTK_WIDGET(child->data);
     g_list_free(child);
@@ -2173,7 +2173,7 @@ static void draw_all_graphs ( GtkWidget *widget, gpointer *pass_along, gboolean 
 	if (!isnan(pc_blob)) {
 	  x_blob = (pc_blob * widgets->profile_width);
 	}
-	y_blob = blobby_grade (x_blob, widgets);
+	y_blob = blobby_gradient (x_blob, widgets);
       }
 
       gdouble marker_x = -1.0; // i.e. Don't draw unless we get a valid value
@@ -2186,7 +2186,7 @@ static void draw_all_graphs ( GtkWidget *widget, gpointer *pass_along, gboolean 
 				       window->style->black_gc,
 				       x_blob+MARGIN,
 				       y_blob,
-				       &widgets->grade_graph_saved_img,
+				       &widgets->gradient_graph_saved_img,
 				       widgets->profile_width,
 				       widgets->profile_height,
 				       &widgets->is_marker_drawn,
@@ -2475,7 +2475,7 @@ GtkWidget *vik_trw_layer_create_profile ( GtkWidget *window, VikTrack *tr, gpoin
 /**
  * Create height profile widgets including the image and callbacks
  */
-GtkWidget *vik_trw_layer_create_grade ( GtkWidget *window, VikTrack *tr, gpointer vlp, VikViewport *vvp, PropWidgets *widgets)
+GtkWidget *vik_trw_layer_create_gradient ( GtkWidget *window, VikTrack *tr, gpointer vlp, VikViewport *vvp, PropWidgets *widgets)
 {
   GdkPixmap *pix;
   GtkWidget *image;
@@ -2483,9 +2483,9 @@ GtkWidget *vik_trw_layer_create_grade ( GtkWidget *window, VikTrack *tr, gpointe
   gpointer *pass_along;
 
   // First allocation
-  widgets->grades = vik_track_make_grade_map ( tr, widgets->profile_width );
+  widgets->gradients = vik_track_make_gradient_map ( tr, widgets->profile_width );
 
-  if ( widgets->grades == NULL ) {
+  if ( widgets->gradients == NULL ) {
     return NULL;
   }
 
@@ -2501,8 +2501,8 @@ GtkWidget *vik_trw_layer_create_grade ( GtkWidget *window, VikTrack *tr, gpointe
   pass_along[3] = widgets;
 
   eventbox = gtk_event_box_new ();
-  g_signal_connect ( G_OBJECT(eventbox), "button_press_event", G_CALLBACK(track_grade_click), pass_along );
-  g_signal_connect ( G_OBJECT(eventbox), "motion_notify_event", G_CALLBACK(track_grade_move), pass_along );
+  g_signal_connect ( G_OBJECT(eventbox), "button_press_event", G_CALLBACK(track_gradient_click), pass_along );
+  g_signal_connect ( G_OBJECT(eventbox), "motion_notify_event", G_CALLBACK(track_gradient_move), pass_along );
   g_signal_connect_swapped ( G_OBJECT(eventbox), "destroy", G_CALLBACK(g_free), pass_along );
   gtk_container_add ( GTK_CONTAINER(eventbox), image );
   gtk_widget_set_events (eventbox, GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_STRUCTURE_MASK);
@@ -2875,7 +2875,7 @@ void vik_trw_layer_propwin_run ( GtkWindow *parent, VikTrwLayer *vtl, VikTrack *
 
   gdouble min_alt, max_alt;
   widgets->elev_box = vik_trw_layer_create_profile(GTK_WIDGET(parent), tr, vlp, vvp, widgets, &min_alt, &max_alt);
-  widgets->grade_box = vik_trw_layer_create_grade(GTK_WIDGET(parent), tr, vlp, vvp, widgets);
+  widgets->gradient_box = vik_trw_layer_create_gradient(GTK_WIDGET(parent), tr, vlp, vvp, widgets);
   widgets->speed_box = vik_trw_layer_create_vtdiag(GTK_WIDGET(parent), tr, vlp, vvp, widgets);
   widgets->dist_box = vik_trw_layer_create_dtdiag(GTK_WIDGET(parent), tr, vlp, vvp, widgets);
   widgets->elev_time_box = vik_trw_layer_create_etdiag(GTK_WIDGET(parent), tr, vlp, vvp, widgets);
@@ -3133,18 +3133,18 @@ void vik_trw_layer_propwin_run ( GtkWindow *parent, VikTrwLayer *vtl, VikTrack *
     gtk_notebook_append_page(GTK_NOTEBOOK(graphs), page, gtk_label_new(_("Elevation-distance")));
   }
 
-  if ( widgets->grade_box ) {
+  if ( widgets->gradient_box ) {
     GtkWidget *page = NULL;
-    widgets->w_cur_grade_dist = gtk_label_new(_("No Data"));
-    widgets->w_cur_grade_grade = gtk_label_new(_("No Data"));
-    widgets->w_show_grade_gps_speed = gtk_check_button_new_with_mnemonic(_("Show _GPS Speed"));
-    page = create_graph_page (widgets->grade_box,
-			      _("<b>Track Distance:</b>"), widgets->w_cur_grade_dist,
-			      _("<b>Track Grade:</b>"), widgets->w_cur_grade_grade,
-			      widgets->w_show_grade_gps_speed, TRUE,
+    widgets->w_cur_gradient_dist = gtk_label_new(_("No Data"));
+    widgets->w_cur_gradient_gradient = gtk_label_new(_("No Data"));
+    widgets->w_show_gradient_gps_speed = gtk_check_button_new_with_mnemonic(_("Show _GPS Speed"));
+    page = create_graph_page (widgets->gradient_box,
+			      _("<b>Track Distance:</b>"), widgets->w_cur_gradient_dist,
+			      _("<b>Track Gradient:</b>"), widgets->w_cur_gradient_gradient,
+			      widgets->w_show_gradient_gps_speed, TRUE,
                   NULL, FALSE);
-    g_signal_connect (widgets->w_show_grade_gps_speed, "toggled", G_CALLBACK (checkbutton_toggle_cb), pass_along);
-    gtk_notebook_append_page(GTK_NOTEBOOK(graphs), page, gtk_label_new(_("Grade-distance")));
+    g_signal_connect (widgets->w_show_gradient_gps_speed, "toggled", G_CALLBACK (checkbutton_toggle_cb), pass_along);
+    gtk_notebook_append_page(GTK_NOTEBOOK(graphs), page, gtk_label_new(_("Gradient-distance")));
   }
 
   if ( widgets->speed_box ) {

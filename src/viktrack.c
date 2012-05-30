@@ -525,11 +525,11 @@ void vik_track_get_total_elevation_gain(const VikTrack *tr, gdouble *up, gdouble
     *up = *down = VIK_DEFAULT_ALTITUDE;
 }
 
-gdouble *vik_track_make_grade_map ( const VikTrack *tr, guint16 num_chunks )
+gdouble *vik_track_make_gradient_map ( const VikTrack *tr, guint16 num_chunks )
 {
   gdouble *pts;
   gdouble *altitudes;
-  gdouble total_length, chunk_length, current_grade;
+  gdouble total_length, chunk_length, current_gradient;
   gdouble altitude1, altitude2;
   guint16 current_chunk;
 
@@ -548,17 +548,17 @@ gdouble *vik_track_make_grade_map ( const VikTrack *tr, guint16 num_chunks )
     return NULL;
   }
 
-  current_grade = 0.0;
+  current_gradient = 0.0;
   pts = g_malloc ( sizeof(gdouble) * num_chunks );
   for (current_chunk = 0; current_chunk < (num_chunks - 1); current_chunk++) {
     altitude1 = altitudes[current_chunk];
     altitude2 = altitudes[current_chunk + 1];
-    current_grade = 100.0 * (altitude2 - altitude1) / chunk_length;
+    current_gradient = 100.0 * (altitude2 - altitude1) / chunk_length;
 
-    pts[current_chunk] = current_grade;
+    pts[current_chunk] = current_gradient;
   }
 
-  pts[current_chunk] = current_grade;
+  pts[current_chunk] = current_gradient;
 
   return pts;
 }

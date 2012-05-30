@@ -171,7 +171,7 @@ typedef struct _propwidgets {
   gdouble   min_grade;
   gdouble   max_grade;
   gdouble   draw_min_grade;
-  gint      cig; // Chunk size Index into Altitudes
+  gint      cig; // Chunk size Index into Grades
   gdouble   *speeds;
   gdouble   *speeds_dist;
   gdouble   min_speed;
